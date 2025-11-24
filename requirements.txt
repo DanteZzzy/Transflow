@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+redis
+motor
+python-dotenv
+pika
+kafka-python
+pydantic

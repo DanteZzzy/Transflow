@@ -1,0 +1,167 @@
+
+
+services:
+  # ---------------------------------------
+  # ZOOKEEPER
+  # ---------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks: [mensageria]
+
+  # ---------------------------------------
+  # KAFKA
+  # ---------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.5.1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9094
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    networks: [mensageria]
+
+  # ---------------------------------------
+  # RABBITMQ (com painel)
+  # ---------------------------------------
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # painel
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks: [mensageria]
+
+  # ---------------------------------------
+  # REDIS
+  # ---------------------------------------
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    networks: [mensageria]
+
+  # ---------------------------------------
+  # MONGO
+  # ---------------------------------------
+  mongo:
+    image: mongo:6
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks: [mensageria]
+
+  # ---------------------------------------
+  # MONGO EXPRESS (painel web)
+  # ---------------------------------------
+  mongo-express:
+    image: mongo-express:1.0.2
+    depends_on:
+      - mongo
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: example
+      ME_CONFIG_MONGODB_URL: mongodb://root:example@mongo:27017/
+    networks: [mensageria]
+
+  # ---------------------------------------
+  # FASTAPI – APP PRINCIPAL
+  # ---------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mensageria-api
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - rabbitmq
+      - redis
+      - mongo
+    volumes:
+      - ./src:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBITMQ_QUEUE: transacoes
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_TOPIC: transacoes
+      KAFKA_GROUP_ID: processadores
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      MONGO_URL: mongodb://root:example@mongo:27017
+      MONGO_DB: mensageria
+      LOG_TO_MONGO: "false"
+      APP_PORT: 8000
+    ports:
+      - "8000:8000"
+    networks: [mensageria]
+
+  # ---------------------------------------
+  # CONSUMER KAFKA
+  # ---------------------------------------
+  consumer_kafka:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/app
+    command: ["python", "consumer_kafka.py"]
+    depends_on:
+      - kafka
+      - redis
+      - mongo
+    networks: [mensageria]
+  # ---------------------------------------
+  # CONSUMER RABBITMQ
+  # ---------------------------------------
+  consumer_rabbit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/app
+    command: ["python", "consumer_rabbit.py"]
+    depends_on:
+      - rabbitmq
+      - redis
+      - mongo
+    networks: [mensageria]
+  # ---------------------------------------
+  # GERADOR DE TÓPICOS KAFKA
+  # ---------------------------------------
+  kafka_setup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/app
+    command: ["python", "create_topics.py"]
+    depends_on:
+      - kafka
+    networks: [mensageria]
+
+volumes:
+  mongo_data:
+
+networks:
+  mensageria:
+    driver: bridge
