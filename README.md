@@ -185,4 +185,3 @@ Projeto acadêmico - TransFlow
 
 ---
 
-Se quiser, posso gerar uma versão mais profissional ou mais simples do README 👍
