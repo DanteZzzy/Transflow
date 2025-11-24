@@ -29,7 +29,7 @@ cd transflow
 
 ### 2️⃣ Criar o arquivo .env
 
-Crie um arquivo chamado `.env` na raiz do projeto (não será versionado pois está no .gitignore):
+Crie um arquivo chamado `.env` na raiz do projeto:
 
 ```env
 RABBITMQ_URL=amqp://guest:guest@localhost:5672/
