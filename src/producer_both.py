@@ -14,14 +14,17 @@ KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "corridas")
 producer = None
 channel = None
 
+
 def get_kafka_producer():
     global producer
     if producer is None:
         producer = KafkaProducer(
-            bootstrap_servers=[KAFKA_BOOTSTRAP],
-            value_serializer=lambda v: json.dumps(v).encode("utf-8")
+            bootstrap_servers=KAFKA_BOOTSTRAP.split(","),
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            retries=5
         )
     return producer
+
 
 def get_rabbit_channel():
     global channel
@@ -32,20 +35,27 @@ def get_rabbit_channel():
         channel = ch
     return channel
 
+
 def publicar_evento(evt: CorridaEvento):
     payload = evt.asdict()
 
     # Kafka
-    producer = get_kafka_producer()
-    producer.send(KAFKA_TOPIC, value=payload)
+    try:
+        producer = get_kafka_producer()
+        producer.send(KAFKA_TOPIC, value=payload)
+    except Exception as e:
+        print("❌ Erro Kafka:", e)
 
     # RabbitMQ
-    channel = get_rabbit_channel()
-    channel.basic_publish(
-        exchange="",
-        routing_key=RABBIT_QUEUE,
-        body=json.dumps(payload),
-        properties=pika.BasicProperties(delivery_mode=2)
-    )
+    try:
+        channel = get_rabbit_channel()
+        channel.basic_publish(
+            exchange="",
+            routing_key=RABBIT_QUEUE,
+            body=json.dumps(payload),
+            properties=pika.BasicProperties(delivery_mode=2)
+        )
+    except Exception as e:
+        print("❌ Erro RabbitMQ:", e)
 
     print("📤 Publicado:", payload)
